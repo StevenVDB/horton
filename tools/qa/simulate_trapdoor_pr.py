@@ -26,9 +26,12 @@ on fedora 23.)
 """
 
 import argparse
+from functools import wraps
 import os
 import shutil
+import shlex
 import subprocess
+import sys
 
 import git
 
@@ -51,10 +54,22 @@ class Log(object):
                The program name.
         """
         self._name = name
+        self.verbose = False
 
     def __call__(self, message, indent=4):
         """Print a message on screen."""
-        print '/%s/ %s%s' % (self._name, ' '*indent, message)
+        if self.verbose:
+            print '/%s/ %s%s' % (self._name, ' ' * indent, message)
+
+    def set_level(self, verbose):
+        """Set the verbosity of the logger object.
+
+        Parameters
+        ----------
+        verbose : bool
+               Whether the logger should print verbosely or not.
+        """
+        self.verbose = verbose
 
     def section(self, name):
         """Dectorator to add section output to function.
@@ -66,13 +81,16 @@ class Log(object):
         """
         def decorator(fn):
             """A function that returns the wrapped version of the original function."""
+            @wraps(fn)
             def wrapper(*args, **kwargs):
                 """The wrapper with additional printing."""
                 self('BEGIN %s.' % name, indent=2)
                 result = fn(*args, **kwargs)
                 self('END %s.' % name, indent=2)
                 return result
+
             return wrapper
+
         return decorator
 
 
@@ -84,6 +102,7 @@ def main():
     # A few general things.
     args = parse_args()
     repo = git.Repo('.')
+    log.set_level(args.verbose)
 
     # Get the QAWORKDIR. Create if it does not exist yet.
     qaworkdir = os.getenv('QAWORKDIR', 'qaworkdir')
@@ -91,27 +110,58 @@ def main():
         os.makedirs(qaworkdir)
 
     # Pre-flight checks.
-    orig_head_name, merge_head_name = run_pre_flight_checks(repo)
+    orig_head_name, merge_head_name = run_pre_flight_checks(
+        repo, remote=args.remote, ancestor=args.ancestor, clean=args.clean)
 
     try:
-        make_temporary_merge(repo, merge_head_name)
-        trapdoor_workflow(repo, args.script, qaworkdir, args.skip_ancestor)
+        if not (args.ancestor or args.skip_merge):
+            make_temporary_merge(repo, merge_head_name)
+        retcode = 0
+        for script in args.scripts:
+            retcode |= trapdoor_workflow(
+                repo, script, qaworkdir, args.skip_ancestor, args.rebuild,
+                args.trapdoor_args, args.ancestor)
+        if retcode != 0:
+            print >> sys.stderr, '\033[91m' + "ERROR in tests. Please inspect log carefully" \
+                + '\033[0m'
+        else:
+            print '\033[92m' + "OK. All tests passed" + '\033[0m'
     finally:
         roll_back(repo, orig_head_name, merge_head_name)
+
+    sys.exit(retcode)
 
 
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Simulate trapdoor test locally.')
-    parser.add_argument('script', type=str, metavar='trapdoor', help='Path to trapdoor script.')
+    parser.add_argument('scripts', type=str, metavar='trapdoor', nargs='*',
+                        help='Paths to trapdoor scripts, separated by spaces.')
+    parser.add_argument('-v', '--verbose', default=False, action='store_true',
+                        help='Prints debugging information.')
     parser.add_argument('-s', '--skip-ancestor', default=False, action='store_true',
                         help='Do not run the trapdoor on master and re-use result for '
                              'ancestor from previous run.')
+    parser.add_argument('-r', '--rebuild', default=False, action='store_true',
+                        help='Rebuild extension before running trapdoor script.')
+    parser.add_argument('-R', '--remote', default='origin',
+                        help='Compare with master on a remote. Defaults to origin.')
+    parser.add_argument('-A', '--ancestor', default=None,
+                        help='Specify SHA of the ancestor commit manually. Useful for testing '
+                             'PRs against non-master branches. Implies --skip-merge for now.')
+    parser.add_argument('-S', '--skip-merge', default=False, action='store_true',
+                        help='Skip the temporary merge and assume the current branch is already '
+                             'merged with the ancestor.')
+    parser.add_argument('-c', '--clean', default=False, action='store_true',
+                        help='deletes the temporary merge that was left over from a failed run '
+                             'of the script')
+    parser.add_argument('-t', '--trapdoor-args', default='',
+                        help='Options to be passed to the trapdoor scripts.')
     return parser.parse_args()
 
 
 @log.section('pre-flight checks')
-def run_pre_flight_checks(repo):
+def run_pre_flight_checks(repo, remote, ancestor, clean=False):
     """Run some initial checks before doing anything.
 
     Parameters
@@ -124,20 +174,25 @@ def run_pre_flight_checks(repo):
     if repo.is_dirty():
         raise RepoError('Not all changes are committed.')
 
-    log('Check whether master is up to date with origin/master.')
-    remote_refs = git_ls_remote('origin')
-    if remote_refs['refs/heads/master'] != repo.heads.master.object.hexsha:
-        raise RepoError('Master is not up to date.')
+    if not ancestor:
+        log('Check whether master is up to date with %s/master.' % remote)
+        remote_refs = git_ls_remote(remote)
+        if remote_refs['refs/heads/master'] != repo.heads.master.object.hexsha:
+            raise RepoError('Master is not up to date.')
 
-    log('Check whether master is currently _not_ checked out.')
-    if repo.active_branch == repo.heads.master:
-        raise RepoError('The master branch is checked out.')
+        log('Check whether master is currently _not_ checked out.')
+        if repo.active_branch == repo.heads.master:
+            raise RepoError('The master branch is checked out.')
 
     log('Check whether temporary branch name does not exist yet.')
     orig_head_name = repo.active_branch.name
     merge_head_name = '%s-trapdoor-tmp-merge' % orig_head_name
     if merge_head_name in repo.heads:
-        raise RepoError('The branch %s exists, probably due to earlier failures of this program.')
+        if clean:
+            repo.delete_head(merge_head_name)
+        else:
+            raise RepoError('The branch %s exists, probably due to earlier '
+                            'failures of this program.')
 
     return orig_head_name, merge_head_name
 
@@ -181,8 +236,8 @@ def make_temporary_merge(repo, merge_head_name):
     log('Checkout new branch: %s.' % merge_head_name)
     merge_head.checkout()
     log('Merge with master.')
-    repo.index.merge_tree(repo.heads.master)
-    repo.index.merge_tree(merge_head)
+    merge_base = repo.merge_base(merge_head, repo.heads.master)
+    repo.index.merge_tree(repo.heads.master, base=merge_base)
     log('Check if merge went well.')
     unmerged_blobs = repo.index.unmerged_blobs()
     for _path, list_of_blobs in unmerged_blobs.iteritems():
@@ -198,31 +253,58 @@ def make_temporary_merge(repo, merge_head_name):
 
 
 @log.section('trapdoor workflow')
-def trapdoor_workflow(repo, script, qaworkdir, skip_ancestor):
+def trapdoor_workflow(repo, script, qaworkdir, skip_ancestor, rebuild, trapdoor_args,
+                      ancestor=None):
     """Run the trapdoor scripts in the right order.
 
     Parameters
     ----------
     repo : git.Repo
-           A repository object from GitPython.
+        A repository object from GitPython.
     script : str
-             The relative path to the trapdoor script.
+         The relative path to the trapdoor script.
     qaworkdir : str
-                The location of the QA work directory.
+        The location of the QA work directory.
     skip_ancestor : bool
-                    If True, the trapdoor script is not executed in the ancestor.
+        If True, the trapdoor script is not executed in the ancestor.
+    rebuild : bool
+        When True, extensions will be rebuilt.
+    trapdoor_args: str
+        Arguments to pass to the trapdoor script.
+    ancestor : str or None
+        When given, this is commit id of the ancestor.
     """
-    subprocess.call([script, 'feature'])
-    if skip_ancestor:
-        subprocess.call([script, 'report'])
-    else:
+    if rebuild:
+        subprocess.check_call(['./setup.py', 'build_ext', '-i'])
+
+    def run_feature():
+        """Run the trapdoor for features."""
+        return subprocess.check_call([script, 'feature'] + shlex.split(trapdoor_args))
+
+    def run_report():
+        """Run the trapdoor for generating reports."""
+        return subprocess.call([script, 'report'])
+
+    def run_ancestor():
+        """Checkout ancestor and run the trapdoor for ancestor."""
         copied_script = os.path.join(qaworkdir, os.path.basename(script))
         shutil.copy(script, copied_script)
+        shutil.copy('tools/qa/trapdoor.py', os.path.join(qaworkdir, 'trapdoor.py'))
         # Check out the master branch. (We should be constructing the ancestor etc. but
         # that should come down to the same thing for a PR.)
-        repo.heads.master.checkout()
-        subprocess.call([copied_script, 'ancestor'])
-        subprocess.call([copied_script, 'report'])
+        if ancestor:
+            repo.head.reference = repo.commit(ancestor)
+            repo.head.reset(index=True, working_tree=True)
+        else:
+            repo.heads.master.checkout()
+        if rebuild:
+            subprocess.check_call(['./setup.py', 'build_ext', '-i'])
+        return subprocess.check_call([copied_script, 'ancestor'] + shlex.split(trapdoor_args))
+
+    run_feature()
+    if not skip_ancestor:
+        run_ancestor()
+    return run_report()
 
 
 @log.section('roll back')

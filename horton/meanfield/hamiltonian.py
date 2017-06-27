@@ -18,7 +18,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>
 #
 # --
-'''Mean-field DFT/HF Hamiltonian data structures'''
+"""Mean-field DFT/HF Hamiltonian data structures"""
 
 
 from horton.log import log
@@ -32,40 +32,36 @@ __all__ = [
 
 
 class EffHam(object):
-    '''Base class for the effective Hamiltonians
+    """Base class for the effective Hamiltonians.
 
-       **Attributes:**
+    Class attributes
+    ----------------
+    ndm : int
+        The number of input density matrices and output fock matrices (e.g. ndm=1 for
+        restricted wfns, ndm=2 for unrestricted wfns.)
+    deriv_scale : float
+        In principle, the fock matrix is the derivative of the expectation value towards
+        the density matrix elements. In practice, this is not always the case. Depending
+        on the type of effective Hamiltonian, the fock matrices must be multiplied with a
+        factor to obtain proper derivatives. This factor is stored in the class attribute
+        ``deriv_scale``. It defaults to 1.0.
+    """
 
-       ndm
-            The number of input density matrices and output fock matrices (e.g.
-            ndm=1 for restricted wfns, ndm=2 for unrestricted wfns.)
-
-       deriv_scale
-            In principle, the fock matrix is the derivative of the expectation
-            value towards the density matrix elements. In practice, this is not
-            always the case. Depending on the type of effective Hamiltonian, the
-            fock matrices must be multiplied with a factor to obtain proper
-            derivatives. This factor is stored in the class attribute
-            ``deriv_scale``. It defaults to 1.0.
-    '''
     ndm = None
     deriv_scale = 1.0
 
     def __init__(self, terms, external=None):
-        '''
-           **Arguments:**
+        """Initialize an EffHam instance.
 
-           terms
-                The terms in the Hamiltonian.
-
-           **Optional arguments:**
-
-           external
-                A dictionary with external energy contributions that do not
-                depend on the wavefunction, e.g. nuclear-nuclear interactions
-                or QM/MM mechanical embedding terms. Use ``nn`` as key for the
-                nuclear-nuclear term.
-        '''
+        Parameters
+        ----------
+        terms : list with instances of Observable
+            The terms in the Hamiltonian.
+        external : dict
+            A dictionary with external energy contributions that do not depend on the
+            wavefunction, e.g. nuclear-nuclear interactions or QM/MM mechanical embedding
+            terms. Use ``nn`` as key for the nuclear-nuclear term.
+        """
         # check arguments:
         if len(terms) == 0:
             raise ValueError('At least one term must be present in the Hamiltonian.')
@@ -80,25 +76,39 @@ class EffHam(object):
         self.cache = Cache()
 
     def reset(self, *dms):
-        '''Clear intermediate results from the cache and specify new input density matrices.
+        """Remove intermediate results from cache and specify new input density matrices.
 
-           **Arguments:**
+        Parameters
+        ----------
+        dm1, dm2, ... : TwoIndex
+            The input density matrices. Their interpretation is fixed in
+            derived classes.
+        """
+        raise NotImplementedError
 
-           dm1, dm2, ...
-                The input density matrices. Their interpretation is fixed in
-                derived classes.
-        '''
+    def reset_delta(self, *delta_dms):
+        """Remove intermediate results for delta_dms from cache and specify new inputs.
+
+        Parameters
+        ----------
+        delta_dm1, delta_dm2, ... : TwoIndex
+            First-order changes to the density matrix, used to compute the dot product
+            with the energy Hessian.
+        """
         raise NotImplementedError
 
     def compute_energy(self):
-        '''Compute the expectation value.
+        """Compute the total energy.
 
-           The input for this method must be provided through the ``reset``
-           method.
+        The input for this method must be provided through the ``reset``
+        method.
 
-           **Returns:** The expectation value, including the constant terms
-           defined through the ``external`` argument of the constructor
-        '''
+        Returns
+        -------
+        energy : float
+            The expectation value, including the constant terms defined through the
+            ``external`` argument of the constructor
+        """
         total = 0.0
         for term in self.terms:
             energy = term.compute_energy(self.cache)
@@ -111,7 +121,7 @@ class EffHam(object):
         return total
 
     def log(self):
-        '''Write an overview of the last computation on screen'''
+        """Write an overview of the last computation on screen."""
         log('Contributions to the energy:')
         log.hline()
         log('                                              term                 Value')
@@ -126,25 +136,55 @@ class EffHam(object):
         log.blank()
 
     def compute_fock(self, *focks):
-        '''Compute the fock matrices, defined is derivatives of the expectation
-           value toward the components of the input density matrices.
+        """Compute the fock matrices.
 
-           **Arguments:**
+        A Fock matrix is the derivative of the energy toward the components of the
+        corresponding input density matrices.
 
-           fock1, fock2, ....
-                A list of output fock operators. Old content is discarded.
+        The input for this method must be provided through the ``reset`` method. Note that
+        the Fock matrix must be multiplied by the factor deriv_scale to obtain the proper
+        derivative of the energy toward the density matrix, in order to maintain the
+        common conventions for Fock matrices.
 
-           The input for this method must be provided through the ``reset``
-           method.
-        '''
+        Parameters
+        ----------
+        fock1, fock2, ... : TwoIndex
+            A list of output Fock operators. Old content is discarded.
+        """
         for fock in focks:
             fock.clear()
         # Loop over all terms and add contributions to the Fock matrix.
         for term in self.terms:
             term.add_fock(self.cache, *focks)
 
+    def compute_dot_hessian(self, *outputs):
+        """Compute the dot product of the energy Hessian with a delta DM.
+
+        The Hessian in this method is the second derivative of the energy towards the
+        matrix elements of the input density matrix or matrices. The ``dms`` and
+        ``delta_dms`` are set via the ``reset`` and ``reset_delta`` methods, respectively.
+
+        Parameters
+        ----------
+        outputs : TwoIndex
+            A list of output TwoIndex objects in which the dot product of the energy
+            Hessian with the delta density matrices is stored.
+
+        Note that the result must be multiplied by the feactor deriv_scale squared in
+        order to obtain the proper second order derivative. This is due to conventions
+        related to the definition of the Fock matrix.
+        """
+        for output in outputs:
+            output.clear()
+        # Loop over all terms and add contributions to the output two-index
+        # objects.
+        for term in self.terms:
+            term.add_dot_hessian(self.cache, *outputs)
+
 
 class REffHam(EffHam):
+    """Effective Hamiltonian for restricted wavefunctions."""
+
     ndm = 1
     deriv_scale = 2.0
 
@@ -156,11 +196,24 @@ class REffHam(EffHam):
         dm_alpha.assign(in_dm_alpha)
 
     @doc_inherit(EffHam)
+    def reset_delta(self, in_delta_dm_alpha):
+        self.cache.clear(tags='d')
+        # Take a copy of the input alpha delta density matrix in the cache.
+        delta_dm_alpha = self.cache.load('delta_dm_alpha', alloc=in_delta_dm_alpha.new, tags='d')[0]
+        delta_dm_alpha.assign(in_delta_dm_alpha)
+
+    @doc_inherit(EffHam)
     def compute_fock(self, fock_alpha):
         EffHam.compute_fock(self, fock_alpha)
 
+    @doc_inherit(EffHam)
+    def compute_dot_hessian(self, output_alpha):
+        EffHam.compute_dot_hessian(self, output_alpha)
+
 
 class UEffHam(EffHam):
+    """Effective Hamiltonian for unrestricted wavefunctions."""
+
     ndm = 2
 
     @doc_inherit(EffHam)
@@ -173,5 +226,18 @@ class UEffHam(EffHam):
         dm_beta.assign(in_dm_beta)
 
     @doc_inherit(EffHam)
+    def reset_delta(self, in_delta_dm_alpha, in_delta_dm_beta):
+        self.cache.clear(tags='d')
+        # Take a copy of the input alpha and beta delta density matrix in the cache.
+        delta_dm_alpha = self.cache.load('delta_dm_alpha', alloc=in_delta_dm_alpha.new, tags='d')[0]
+        delta_dm_alpha.assign(in_delta_dm_alpha)
+        delta_dm_beta = self.cache.load('delta_dm_beta', alloc=in_delta_dm_beta.new, tags='d')[0]
+        delta_dm_beta.assign(in_delta_dm_beta)
+
+    @doc_inherit(EffHam)
     def compute_fock(self, fock_alpha, fock_beta):
         EffHam.compute_fock(self, fock_alpha, fock_beta)
+
+    @doc_inherit(EffHam)
+    def compute_dot_hessian(self, output_alpha, output_beta):
+        EffHam.compute_dot_hessian(self, output_alpha, output_beta)

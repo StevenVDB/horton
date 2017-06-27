@@ -42,6 +42,18 @@ cdef extern from "horton/gbasis/ints.h":
     cdef cppclass GB2NuclearAttractionIntegral:
         GB2NuclearAttractionIntegral(long max_shell_type, double* charges, double* centers, long ncharge) except +
 
+    cdef cppclass GB2ErfAttractionIntegral:
+        GB2ErfAttractionIntegral(long max_shell_type, double* charges, double* centers, long ncharge, double mu) except +
+        double get_mu()
+
+    cdef cppclass GB2GaussAttractionIntegral:
+        GB2GaussAttractionIntegral(long max_shell_type, double* charges, double* centers, long ncharge, double c, double alpha) except +
+        double get_c()
+        double get_alpha()
+
+    cdef cppclass GB2MomentIntegral:
+        GB2MomentIntegral(long max_shell_type, long* xyz, double* center) except +
+
     cdef cppclass GB4Integral:
         long get_nwork()
         long get_max_shell_type()
@@ -58,6 +70,19 @@ cdef extern from "horton/gbasis/ints.h":
 
     cdef cppclass GB4ElectronRepulsionIntegralLibInt:
         GB4ElectronRepulsionIntegralLibInt(long max_shell_type) except +
+
+    cdef cppclass GB4ErfIntegralLibInt:
+        GB4ErfIntegralLibInt(long max_shell_type, double mu) except +
+        double get_mu()
+
+    cdef cppclass GB4GaussIntegralLibInt:
+        GB4GaussIntegralLibInt(long max_shell_type, double c, double alpha) except +
+        double get_c()
+        double get_alpha()
+
+    cdef cppclass GB4RAlphaIntegralLibInt:
+        GB4RAlphaIntegralLibInt(long max_shell_type, double alpha) except +
+        double get_alpha()
 
 
 cdef extern from "libint2.h":

@@ -20,11 +20,19 @@
 # --
 
 
-import numpy as np, tempfile, shutil
 from contextlib import contextmanager
-import subprocess, os, shlex
+import hashlib
+import os
+import shutil
+import subprocess
+import tempfile
 
-from horton import *
+import numpy as np
+
+from horton.cext import Cell
+from horton.moments import get_cartesian_powers
+from horton.matrix.dense import DenseTwoIndex, DenseFourIndex
+from horton.meanfield.occ import AufbauOccModel
 
 
 __all__ = [
@@ -34,7 +42,7 @@ __all__ = [
     'compare_expansions', 'compare_all_expansions', 'compare_dms',
     'compare_all_dms', 'compare_operators', 'compare_occ_model', 'compare_exps',
     'compare_mols', 'compare_symmetries',
-    'tmpdir', 'numpy_seed',
+    'tmpdir', 'numpy_seed', 'truncated_file',
 ]
 
 
@@ -118,7 +126,13 @@ def check_script_in_tmp(command, required, expected):
             A list of files expected to be present in the tmp dir after
             execution.
     '''
-    with tmpdir('check_scrip_in_tmp-%s' % os.path.basename(command)) as dn:
+    # Create a unique-ish suffix
+    m = hashlib.sha256(command)
+    for s in required + expected:
+        m.update(s)
+    suffix = m.hexdigest()
+    # Do the actual work.
+    with tmpdir('check_scrip_in_tmp-{}'.format(suffix)) as dn:
         # copy files into tmp
         for fn in required:
             shutil.copy(fn, os.path.join(dn, os.path.basename(fn)))
@@ -148,12 +162,20 @@ def check_delta(fun, fun_deriv, x, dxs):
 
        For every displacement in ``dxs``, the following computation is repeated:
 
-       1) D1 = 'fun(x+dx) - fun(x)' is computed.
-       2) D2 = '0.5 (fun_deriv(x+dx) + fun_deriv(x)) . dx' is computed.
+       1) ``D1 = fun(x+dx) - fun(x)`` is computed.
+       2) ``D2 = 0.5*dot(fun_deriv(x+dx) + fun_deriv(x), dx)`` is computed.
 
        A threshold is set to the median of the D1 set. For each case where |D1|
        is larger than the threshold, |D1 - D2|, should be smaller than the
        threshold.
+
+       This test makes two assumptions:
+
+       1) The gradient at ``x`` is non-zero.
+       2) The displacements, ``dxs``, are small enough such that in the majority
+          of cases, the linear term in ``fun(x+dx) - fun(x)`` dominates. Hence,
+          sufficient elements in ``dxs`` should be provided for this test to
+          work.
     """
     assert len(x.shape) == 1
     if len(dxs) < 20:
@@ -372,3 +394,30 @@ def numpy_seed(seed=1):
     np.random.seed(seed)
     yield None
     np.random.set_state(state)
+
+
+@contextmanager
+def truncated_file(name, fn_orig, nline, nadd):
+    """Make a temporary truncated copy of a file.
+
+    Parameters
+    ----------
+    name : str
+           The name of test, used to make a unique temporary directory
+    fn_orig : str
+              The file to be truncated.
+    nline : int
+            The number of lines to retain.
+    nadd : int
+           The number of empty lines to add.
+    """
+    with tmpdir(name) as dn:
+        fn_truncated = '%s/truncated_%i_%s' % (dn, nline, os.path.basename(fn_orig))
+        with open(fn_orig) as f_orig, open(fn_truncated, 'w') as f_truncated:
+            for counter, line in enumerate(f_orig):
+                if counter >= nline:
+                    break
+                f_truncated.write(line)
+            for _ in xrange(nadd):
+                f_truncated.write('\n')
+        yield fn_truncated

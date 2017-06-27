@@ -45,13 +45,15 @@ class ImportTrapdoorProgram(TrapdoorProgram):
         """Initialize the ImportTrapdoorProgram."""
         TrapdoorProgram.__init__(self, 'import')
 
-    def get_stats(self, config):
+    def get_stats(self, config, args):
         """Count number of bad tests.
 
         Parameters
         ----------
         config : dict
                  The dictionary loaded from ``trapdoor.cfg``.
+        args : argparse.Namespace
+            The result of parsing the command line arguments.
 
         Returns
         -------
@@ -77,14 +79,17 @@ class ImportTrapdoorProgram(TrapdoorProgram):
                 continue
             if filename.endswith('/__init__.py'):
                 continue
+            if 'data/examples/' in filename:
+                continue
             # Look for bad imports
             with codecs.open(filename, encoding='utf-8') as f:
                 for lineno, line in enumerate(f):
                     for package in packages:
-                        if u'from %s import' % package in line:
+                        if u'from %s import' % package in line and \
+                           line != u'from %s import __version__\n' % package:
                             counter['Wrong imports in %s' % filename] += 1
                             text = 'Wrong import from %s' % package
-                            messages.add(Message(filename, lineno, None, text))
+                            messages.add(Message(filename, lineno + 1, None, text))
 
         return counter, messages
 

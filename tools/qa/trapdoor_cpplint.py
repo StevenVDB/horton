@@ -56,13 +56,15 @@ class CPPLintTrapdoorProgram(TrapdoorProgram):
         shutil.copy('tools/qa/cpplint.py', self.cpplint_file)
         os.chmod(self.cpplint_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
 
-    def get_stats(self, config):
+    def get_stats(self, config, args):
         """Run tests using cpplint.py.
 
         Parameters
         ----------
         config : dict
                  The dictionary loaded from ``trapdoor.cfg``.
+        args : argparse.Namespace
+            The result of parsing the command line arguments.
 
         Returns
         -------
@@ -75,8 +77,9 @@ class CPPLintTrapdoorProgram(TrapdoorProgram):
         print 'USING              : cpplint.py update #456'
 
         # Call cpplint
-        command = [self.cpplint_file, '--linelength=100'] + get_source_filenames(config, 'cpp')
-        output = run_command(command, has_failed=has_failed)[0]
+        command = [self.cpplint_file, '--linelength=100', '--filter=-runtime/int']
+        command += get_source_filenames(config, 'cpp')
+        output = run_command(command, has_failed=has_failed)[1]
 
         # Parse the output of cpplint into standard return values
         counter = Counter()

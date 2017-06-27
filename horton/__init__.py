@@ -21,7 +21,7 @@
 '''The main HORTON Package'''
 
 
-__version__ = '2.0.1'
+__version__ = '2.1.0b2'
 
 
 # Extensions are imported first to call fpufix as early as possible
@@ -46,7 +46,4 @@ from horton.quadprog import *
 from horton.units import *
 from horton.utils import *
 from horton.modelhamiltonians import *
-from horton.correlatedwfn import *
 from horton.orbital_utils import *
-from horton.localization import *
-from horton.orbital_entanglement import *

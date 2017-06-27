@@ -208,7 +208,8 @@ Always **loading**       ``title`` ``coordinates`` ``numbers`` ``obasis`` ``exp_
                          ``energy`` ``pseudo_numbers`` ``mulliken_charges``
 **loading** if present   ``npa_charges`` ``esp_charges`` ``exp_beta`` ``dm_full_mp2`` ``dm_spin_mp2`` |br|
                          ``dm_full_mp3`` ``dm_spin_mp3`` ``dm_full_cc`` ``dm_spin_cc`` ``dm_full_ci`` |br|
-                         ``dm_spin_ci`` ``dm_full_scf`` ``dm_spin_scf``
+                         ``dm_spin_ci`` ``dm_full_scf`` ``dm_spin_scf`` ``polar`` ``dipole_moment`` |br|
+                         ``quadrupole_moment``
 Derived when **loading** ``natom``
 ======================== =======================================================
 
@@ -223,12 +224,14 @@ Recognized by            File extension ``.molden``
 Interoperation           `Molpro <https://www.molpro.net/>`_,
                          `Orca <https://orcaforum.cec.mpg.de/>`_,
                          `PSI4 <http://www.psicode.org/>`_,
-                         `Molden <http://www.cmbi.ru.nl/molden/>`_
-Always **loading**       ``coordinates`` ``numbers`` ``obasis`` ``exp_alpha`` ``signs``
+                         `Molden <http://www.cmbi.ru.nl/molden/>`_,
+                         `Turbomole <http://www.turbomole.com/>`_
+Always **loading**       ``coordinates`` ``numbers`` ``obasis`` ``exp_alpha``
+                         ``pseudo_numbers`` ``signs``
 **loading** if present   ``title`` ``exp_beta``
 Derived when **loading** ``natom``
 Required for **dumping** ``coordinates`` ``numbers`` ``obasis`` ``exp_alpha``
-Optional for **dumping** ``title`` ``exp_beta``
+Optional for **dumping** ``title`` ``exp_beta`` ``pseudo_numbers``
 ======================== =======================================================
 
 
@@ -256,7 +259,7 @@ Dump                     No
 Recognized by            File extension ``.wfn``
 Interoperation           `GAMESS <http://www.msg.ameslab.gov/gamess/>`_,
                          `Gaussian <http://www.gaussian.com/>`_,
-Always **loading**       ``title`` ``coordinates`` ``numbers`` ``obasis`` ``exp_alpha``
+Always **loading**       ``title`` ``coordinates`` ``numbers`` ``obasis`` ``exp_alpha`` ``energy``
 **loading** if present   ``exp_beta``
 Derived when **loading** ``natom``
 ======================== =======================================================

@@ -3,8 +3,8 @@
 
 # You can set these variables from the command line.
 SPHINXOPTS        =
-SPHINXBUILD       = PYTHONPATH=../:$(PYTHONPATH) sphinx-build
-SPHINXAUTOBUILD   = PYTHONPATH=../:$(PYTHONPATH) sphinx-autobuild
+SPHINXBUILD       = PYTHONPATH=../:./:$(PYTHONPATH) sphinx-build
+SPHINXAUTOBUILD   = PYTHONPATH=../:./:$(PYTHONPATH) sphinx-autobuild
 PAPER             =
 BUILDDIR          = _build
 
@@ -56,6 +56,8 @@ clean:
 	rm -f doxygen_warnings.log
 	rm -f user_download_and_install_linux.rst
 	rm -f user_download_and_install_mac.rst
+	rm -f user_download_and_install_windows.rst
+	rm -f tech_dev_git.rst
 
 html: autogendoc
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html

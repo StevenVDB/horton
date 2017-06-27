@@ -24,7 +24,6 @@
 This test calls the pylint program, see http://docs.pylint.org/index.html.
 """
 
-
 import os
 import shutil
 from collections import Counter
@@ -53,13 +52,15 @@ class PylintTrapdoorProgram(TrapdoorProgram):
         TrapdoorProgram.prepare(self)
         shutil.copy('tools/qa/pylintrc', self.rcfile)
 
-    def get_stats(self, config):
+    def get_stats(self, config, args):
         """Run tests using Pylint.
 
         Parameters
         ----------
         config : dict
                  The dictionary loaded from ``trapdoor.cfg``.
+        args : argparse.Namespace
+            The result of parsing the command line arguments.
 
         Returns
         -------
@@ -77,8 +78,12 @@ class PylintTrapdoorProgram(TrapdoorProgram):
         py_extra = get_source_filenames(config, 'py', unpackaged_only=True)
 
         # call Pylint
-        command = ['pylint'] + config['py_packages'] + py_extra + [
-            '--rcfile=%s' % self.rcfile, '--ignore=%s' % (','.join(config['py_exclude']))]
+        command = ['pylint'] + config['py_packages'] \
+                  + py_extra \
+                  + ['--rcfile=%s' % self.rcfile,
+                     '--ignore=%s' % (
+                         ','.join(config['py_exclude'])),
+                     '-j 2', ]
         output = run_command(command, has_failed=has_failed)[0]
 
         # parse the output of Pylint into standard return values

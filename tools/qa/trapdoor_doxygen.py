@@ -69,13 +69,15 @@ class DoxygenTrapdoorProgram(TrapdoorProgram):
         TrapdoorProgram.prepare(self)
         shutil.copy('doc/doxygen.conf', self.doxyconf_file)
 
-    def get_stats(self, config):
+    def get_stats(self, config, args):
         """Run tests using doxygen.
 
         Parameters
         ----------
         config : dict
                  The dictionary loaded from ``trapdoor.cfg``.
+        args : argparse.Namespace
+            The result of parsing the command line arguments.
 
         Returns
         -------
@@ -107,8 +109,12 @@ class DoxygenTrapdoorProgram(TrapdoorProgram):
                 if filename.startswith(prefix):
                     filename = filename[len(prefix):]
                 message = Message(filename, int(lineno), None, description)
-                counter[filename] += 1
-                messages.add(message)
+                # Sadly, doxygen sometimes generates duplicate messages for no good
+                # reason, which leads to incorrect counters and incorrectly failing tests.
+                # We need to check this explicitly...
+                if message not in messages:
+                    counter[filename] += 1
+                    messages.add(message)
         return counter, messages
 
 

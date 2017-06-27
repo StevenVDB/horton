@@ -25,7 +25,8 @@ import numpy as np
 
 from horton.context import context
 from horton.gbasis.cext import GOBasis
-from horton.gbasis.iobas import load_basis_atom_map_nwchem
+from horton.gbasis.iobas import load_basis_atom_map_nwchem, load_basis_atom_map_gbs, \
+    dump_basis_atom_map_gbs
 from horton.log import log
 from horton.periodic import periodic
 from horton.utils import typecheck_geo
@@ -227,14 +228,39 @@ class GOBasisFamily(object):
         return self.basis_atom_map.get(number)
 
     def load(self):
-        """Load the basis set from file."""
+        """Load the basis set from file if it hasn't been done already.
+
+        Note
+        ----
+        If the basis_atom_map is already defined (not None), then the load method is ignored
+        """
+        # if basis_atom_map is already defined
+        if self.basis_atom_map is not None:
+            # ignore load method
+            return
         if self.filename.endswith('.nwchem'):
             self.basis_atom_map = load_basis_atom_map_nwchem(self.filename)
+        elif self.filename.endswith('.gbs'):
+            self.basis_atom_map = load_basis_atom_map_gbs(self.filename)
         else:
             raise IOError('File format not supported: %s' % self.filename)
         self._to_arrays()
         self._to_segmented()
         self._normalize_contractions()
+
+    def dump(self, filename):
+        """Dump the basis set in the gbs format.
+
+        Parameters
+        ----------
+        filename : str
+            Name of the gbs file that will be created.
+        """
+        self.load()
+        if filename.endswith('.gbs'):
+            dump_basis_atom_map_gbs(filename, self.name, self.basis_atom_map)
+        else:
+            raise IOError('File format not supported: %s' % filename)
 
     def _to_arrays(self):
         """Convert all contraction attributes to numpy arrays."""
@@ -282,6 +308,8 @@ go_basis_families_list = [
     GOBasisFamily('aug-cc-pVDZ', filename=context.get_fn('basis/aug-cc-pvdz.nwchem')),
     GOBasisFamily('aug-cc-pVTZ', filename=context.get_fn('basis/aug-cc-pvtz.nwchem')),
     GOBasisFamily('aug-cc-pVQZ', filename=context.get_fn('basis/aug-cc-pvqz.nwchem')),
+    GOBasisFamily('aug-cc-pV5Z', filename=context.get_fn('basis/aug-cc-pv5z.nwchem')),
+    GOBasisFamily('aug-cc-pV6Z', filename=context.get_fn('basis/aug-cc-pv6z.nwchem')),
     GOBasisFamily('aug-cc-pCVDZ', filename=context.get_fn('basis/aug-cc-pcvdz.nwchem')),
     GOBasisFamily('aug-cc-pCVTZ', filename=context.get_fn('basis/aug-cc-pcvtz.nwchem')),
     GOBasisFamily('aug-cc-pCVQZ', filename=context.get_fn('basis/aug-cc-pcvqz.nwchem')),

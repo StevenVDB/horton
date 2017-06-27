@@ -525,12 +525,6 @@ class DenseOneIndex(OneIndex):
                 The number of basis functions.
         """
         self._array = np.zeros((nbasis,))
-        log.mem.announce(self._array.nbytes)
-
-    def __del__(self):
-        if log is not None:
-            if hasattr(self, '_array'):
-                log.mem.denounce(self._array.nbytes)
 
     #
     # Methods from base class
@@ -839,12 +833,6 @@ class DenseExpansion(Expansion):
         self._coeffs = np.zeros((nbasis, nfn))
         self._energies = np.zeros(nfn)
         self._occupations = np.zeros(nfn)
-        log.mem.announce(self._coeffs.nbytes + self._energies.nbytes + self._occupations.nbytes)
-
-    def __del__(self):
-        if log is not None:
-            if hasattr(self, '_coeffs') and hasattr(self, '_energies') and hasattr(self, '_occupations'):
-                log.mem.denounce(self._coeffs.nbytes + self._energies.nbytes + self._occupations.nbytes)
 
     #
     # Methods from base class
@@ -1460,12 +1448,6 @@ class DenseTwoIndex(TwoIndex):
         if nbasis1 is None:
             nbasis1 = nbasis
         self._array = np.zeros((nbasis, nbasis1))
-        log.mem.announce(self._array.nbytes)
-
-    def __del__(self):
-        if log is not None:
-            if hasattr(self, '_array'):
-                log.mem.denounce(self._array.nbytes)
 
     #
     # Methods from base class
@@ -1565,10 +1547,7 @@ class DenseTwoIndex(TwoIndex):
         elif isinstance(other, float) or isinstance(other, int):
             self._array[:] = other
         elif isinstance(other, np.ndarray):
-            if other.shape == self.shape:
-                self._array[:] = other
-            else:
-                self._array[:] = other.reshape((self.nbasis, self.nbasis1))
+            self._array[:] = other
         else:
             raise TypeError('Do not know how to assign object of type %s.' % type(other))
 
@@ -2364,12 +2343,6 @@ class DenseThreeIndex(ThreeIndex):
         if nbasis2 is None:
             nbasis2 = nbasis
         self._array = np.zeros((nbasis, nbasis1, nbasis2), float)
-        log.mem.announce(self._array.nbytes)
-
-    def __del__(self):
-        if log is not None:
-            if hasattr(self, '_array'):
-                log.mem.denounce(self._array.nbytes)
 
     #
     # Methods from base class
@@ -2734,12 +2707,6 @@ class DenseFourIndex(FourIndex):
         if nbasis3 is None:
             nbasis3 = nbasis
         self._array = np.zeros((nbasis, nbasis1, nbasis2, nbasis3))
-        log.mem.announce(self._array.nbytes)
-
-    def __del__(self):
-        if log is not None:
-            if hasattr(self, '_array'):
-                log.mem.denounce(self._array.nbytes)
 
     #
     # Methods from base class
